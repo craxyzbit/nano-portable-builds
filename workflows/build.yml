@@ -1,1 +1,70 @@
 
+name: Build Portable Nano
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debian12-amd64
+            container: debian:12
+            install_cmd: |
+              apt-get update
+              apt-get install -y \
+                build-essential \
+                gettext \
+                texinfo \
+                pkg-config \
+                wget \
+                xz-utils \
+                libncursesw5-dev
+            configure_args: --prefix=/opt/nano-portable
+            package_type: tar.gz
+
+          - name: alpine323-amd64
+            container: alpine:3.23
+            install_cmd: |
+              apk add --no-cache \
+                build-base \
+                gettext-dev \
+                ncurses-dev \
+                linux-headers \
+                wget \
+                xz \
+                tar
+            configure_args: --prefix=/opt/nano-portable
+            package_type: tar.gz
+
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+
+    steps:
+      - name: Install dependencies
+        run: ${{ matrix.install_cmd }}
+
+      - name: Download source
+        run: |
+          wget https://www.nano-editor.org/dist/v9/nano-9.0.tar.xz
+          tar -xf nano-9.0.tar.xz
+
+      - name: Build
+        run: |
+          cd nano-9.0
+          ./configure ${{ matrix.configure_args }}
+          make -j$(nproc)
+          make install
+
+      - name: Package
+        run: |
+          mkdir -p /tmp/output
+          tar -czf /tmp/output/nano-9.0-${{ matrix.name }}.tar.gz -C /opt nano-portable
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nano-9.0-${{ matrix.name }}
+          path: /tmp/output/*.tar.gz
